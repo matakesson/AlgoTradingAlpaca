@@ -3,6 +3,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using AlgoTradingAlpaca.Configurations;
+using AlgoTradingAlpaca.Data;
 using AlgoTradingAlpaca.Interfaces;
 using AlgoTradingAlpaca.Models;
 using Microsoft.Extensions.Options;
@@ -13,10 +14,13 @@ public class WebSocketService : IWebSocketService
 {
     private readonly AlpacaConfig _config;
     private ClientWebSocket _barsWebSocket;
+    
+    private IServiceProvider _serviceProvider;
 
-    public WebSocketService(IOptions<AlpacaConfig> configOptions)
+    public WebSocketService(IOptions<AlpacaConfig> configOptions, IServiceProvider serviceProvider)
     {
         _config = configOptions.Value ?? throw new ArgumentNullException(nameof(configOptions));
+        _serviceProvider = serviceProvider;
     }
 
     public async Task StartBarsWebSocketAsync(string[] symbols)
@@ -147,6 +151,13 @@ public class WebSocketService : IWebSocketService
                         TimeStamp = DateTime.Parse(timeElement.GetString()),
                         Volume = volumeElement.GetDouble()
                     };
+
+                    using (var scope = _serviceProvider.CreateScope())
+                    {
+                        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                        dbContext.Add(barData);
+                        await dbContext.SaveChangesAsync();
+                    }
                     
                     Console.WriteLine($"Processed bar: {barData.Symbol} - Close: {barData.ClosingPrice}");
                 } 

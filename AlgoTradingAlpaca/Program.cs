@@ -1,6 +1,8 @@
 using AlgoTradingAlpaca.Configurations;
+using AlgoTradingAlpaca.Data;
 using AlgoTradingAlpaca.Interfaces;
 using AlgoTradingAlpaca.Services;
+using Microsoft.EntityFrameworkCore;
 
 namespace AlgoTradingAlpaca;
 
@@ -11,6 +13,11 @@ public class Program
         var builder = WebApplication.CreateBuilder(args);
 
         builder.Configuration.AddUserSecrets<Program>();
+        
+        var connectionString = builder.Configuration.GetConnectionString("AlpacaTradingContextConnection") ?? throw
+            new InvalidOperationException("Connection string not found");
+
+        builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlServer(connectionString));
         
         // Add services to the container.
         builder.Services.Configure<AlpacaConfig>(builder.Configuration.GetSection("Alpaca"));
