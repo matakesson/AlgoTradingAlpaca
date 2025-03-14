@@ -4,5 +4,5 @@ namespace AlgoTradingAlpaca.Interfaces;
 
 public interface IWebSocketService
 {
-    Task StartBarsWebSocketAsync();
+    Task StartBarsWebSocketAsync(string[] symbols);
 }

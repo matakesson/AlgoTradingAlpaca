@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using AlgoTradingAlpaca.Configurations;
 using AlgoTradingAlpaca.Interfaces;
+using AlgoTradingAlpaca.Models;
 using Microsoft.Extensions.Options;
 
 namespace AlgoTradingAlpaca.Services;
@@ -18,14 +19,16 @@ public class WebSocketService : IWebSocketService
         _config = configOptions.Value ?? throw new ArgumentNullException(nameof(configOptions));
     }
 
-    public async Task StartBarsWebSocketAsync()
+    public async Task StartBarsWebSocketAsync(string[] symbols)
     {
-        if (_barsWebSocket != null && _barsWebSocket.State == WebSocketState.Open)
+        if (_barsWebSocket is { State: WebSocketState.Open })
         {
             Console.WriteLine("Bars Websocket is already running");
         }
 
         await ConnectToBarsWebSocketAsync();
+        await SubScribeToBarsWebSocketAsync(symbols);
+        _ = Task.Run(() => ReceiveMessageAsync(_barsWebSocket));
     }
 
     private async Task ConnectToBarsWebSocketAsync()
@@ -41,6 +44,16 @@ public class WebSocketService : IWebSocketService
         await SendMessageAsync(authMessage, clientWebSocket);
     }
 
+    private async Task SubScribeToBarsWebSocketAsync(string[] barSymbols)
+    {
+        string symbolsList = string.Join("\",\"", barSymbols);
+        string barsSubscriptíonMessage = $"{{ \"action\":\"subscribe\", \"bars\": [\"{symbolsList}\"] }}";
+        Console.WriteLine($"Bars subscription message {barsSubscriptíonMessage}");
+        
+        await SendMessageAsync(barsSubscriptíonMessage, _barsWebSocket);
+        Console.WriteLine($"Subscribed to bars: {string.Join(", ", barSymbols)}");
+    }
+
     private async Task SendMessageAsync(string message, ClientWebSocket clientWebSocket)
     {
         if (clientWebSocket?.State != WebSocketState.Open)
@@ -54,63 +67,91 @@ public class WebSocketService : IWebSocketService
         }
     }
 
-    // private async Task ReceiveMessageAsync(ClientWebSocket clientWebSocket)
-    // {
-    //     byte[] buffer = new byte[4096];
-    //
-    //     try
-    //     {
-    //         Console.WriteLine("Started listening for messages...");
-    //
-    //         while (clientWebSocket?.State == WebSocketState.Open)
-    //         {
-    //             WebSocketReceiveResult result = await clientWebSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
-    //             if (result.EndOfMessage)
-    //             {
-    //                 string message = Encoding.UTF8.GetString(buffer, 0, result.Count);
-    //                 Console.WriteLine($"Received message: {message}");
-    //                 ProcessMessage(message);
-    //             }
-    //         }
-    //     }
-    //     catch (Exception ex)
-    //     {
-    //         Console.WriteLine($"Error receiving messages: {ex.Message}");
-    //     }
-    // }
-    //
-    // private async Task ProcessMessage(string message)
-    // {
-    //     try
-    //     {
-    //         var jsonDocument = JsonDocument.Parse(message);
-    //         var root = jsonDocument.RootElement;
-    //
-    //         if (root.ValueKind == JsonValueKind.Array)
-    //         {
-    //             foreach (var element in root.EnumerateArray())
-    //             {
-    //                 ProcessSingleElement(element);
-    //             }
-    //         }
-    //         else if (root.ValueKind == JsonValueKind.Object)
-    //         {
-    //             ProcessSingleElement(root);
-    //         }
-    //         else
-    //         {
-    //             Console.WriteLine("Unexpected message type");
-    //         }
-    //     }
-    //     catch (JsonException ex)
-    //     {
-    //         Console.WriteLine($"Error receiving message: {ex.Message}");
-    //     }
-    // }
-    //
-    // private async Task ProcessSingleElement(JsonElement element)
-    // {
-    //     
-    // }
+    private async Task ReceiveMessageAsync(ClientWebSocket clientWebSocket)
+    {
+        byte[] buffer = new byte[4096];
+    
+        try
+        {
+            Console.WriteLine("Started listening for messages...");
+    
+            while (clientWebSocket?.State == WebSocketState.Open)
+            {
+                WebSocketReceiveResult result = await clientWebSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+                if (result.EndOfMessage)
+                {
+                    string message = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                    Console.WriteLine($"Received message: {message}");
+                    await ProcessMessageAsync(message);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error receiving messages: {ex.Message}");
+        }
+    }
+    
+    private async Task ProcessMessageAsync(string message)
+    {
+        try
+        {
+            var jsonDocument = JsonDocument.Parse(message);
+            var root = jsonDocument.RootElement;
+    
+            if (root.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var element in root.EnumerateArray())
+                {
+                    await ProcessSingleElementAsync(element);
+                }
+            }
+            else if (root.ValueKind == JsonValueKind.Object)
+            {
+                await ProcessSingleElementAsync(root);
+            }
+            else
+            {
+                Console.WriteLine("Unexpected message type");
+            }
+        }
+        catch (JsonException ex)
+        {
+            Console.WriteLine($"Error receiving message: {ex.Message}");
+        }
+    }
+    
+    private async Task ProcessSingleElementAsync(JsonElement element)
+    {
+        if (element.TryGetProperty("T", out var typeElement))
+        {
+            string messageType = typeElement.GetString();
+
+            if (messageType == "b") // For bars
+            {
+                if (element.TryGetProperty("S", out var symbolElement) &&
+                    element.TryGetProperty("o", out var openElement) &&
+                    element.TryGetProperty("h", out var highElement) &&
+                    element.TryGetProperty("l", out var lowElement) &&
+                    element.TryGetProperty("c", out var closeElement) &&
+                    element.TryGetProperty("t", out var timeElement) &&
+                    element.TryGetProperty("v", out var volumeElement))
+                {
+                    var barData = new BarData()
+                    {
+                        Symbol = symbolElement.GetString(),
+                        OpenPrice = openElement.GetDouble(),
+                        HighPrice = highElement.GetDouble(),
+                        LowPrice = lowElement.GetDouble(),
+                        ClosingPrice = closeElement.GetDouble(),
+                        TimeStamp = DateTime.Parse(timeElement.GetString()),
+                        Volume = volumeElement.GetDouble()
+                    };
+                    
+                    Console.WriteLine($"Processed bar: {barData.Symbol} - Close: {barData.ClosingPrice}");
+                } 
+            }
+        }
+    }
 
 }

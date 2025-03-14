@@ -23,7 +23,7 @@ public class WebSocketController : Controller
             return BadRequest();
         }
         
-        await _webSocketService.StartBarsWebSocketAsync();
+        await _webSocketService.StartBarsWebSocketAsync(symbols);
         return Ok($"Bars WebSocket streaming started for: {string.Join(", ", symbols)}");
     }
 }
