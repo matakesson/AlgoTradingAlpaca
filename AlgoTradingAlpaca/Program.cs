@@ -10,6 +10,8 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
+        builder.Configuration.AddUserSecrets<Program>();
+        
         // Add services to the container.
         builder.Services.Configure<AlpacaConfig>(builder.Configuration.GetSection("Alpaca"));
         builder.Services.AddSingleton<IWebSocketService, WebSocketService>();
