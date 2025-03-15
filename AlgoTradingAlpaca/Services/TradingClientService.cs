@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using AlgoTradingAlpaca.Configurations;
 using AlgoTradingAlpaca.Interfaces;
+using AlgoTradingAlpaca.Models;
 using Microsoft.Extensions.Options;
 
 namespace AlgoTradingAlpaca.Services;
@@ -22,7 +23,7 @@ public class TradingClientService : ITradingClientService
         _httpClient.DefaultRequestHeaders.Add("APCA-API-SECRET-KEY", _config.ApiSecret);
     }
 
-    public async Task PlaceMarketOrderAsync(string symbol, int quantity, string side, double currentPrice, double takeProfit,
+    public async Task<OrderResponse> PlaceMarketOrderAsync(string symbol, int quantity, string side, double currentPrice, double takeProfit,
         double stopLoss)
     {
         if (quantity <= 0)
@@ -59,7 +60,7 @@ public class TradingClientService : ITradingClientService
             if (response.IsSuccessStatusCode)
             {
                 var deserializedResponse = await response.Content.ReadAsStringAsync();
-                Console.WriteLine(deserializedResponse);
+                return JsonSerializer.Deserialize<OrderResponse>(deserializedResponse);
             }
 
             else
