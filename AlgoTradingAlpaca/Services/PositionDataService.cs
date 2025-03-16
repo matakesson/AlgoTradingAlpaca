@@ -1,9 +1,10 @@
 using AlgoTradingAlpaca.Data;
+using AlgoTradingAlpaca.Interfaces;
 using AlgoTradingAlpaca.Models;
 
 namespace AlgoTradingAlpaca.Services;
 
-public class PositionDataService
+public class PositionDataService : IPositionDataService
 {
     private AppDbContext _context;
 
