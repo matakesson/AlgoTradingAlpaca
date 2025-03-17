@@ -6,16 +6,19 @@ namespace AlgoTradingAlpaca.Services;
 
 public class PositionDataService : IPositionDataService
 {
-    private AppDbContext _context;
+    private IServiceProvider _serviceProvider;
 
-    public PositionDataService(AppDbContext context)
+    public PositionDataService(IServiceProvider serviceProvider)
     {
-        _context = context;
+        _serviceProvider  = serviceProvider;
     }
 
     public async Task<List<Position>> GetPositionsAsync()
     {
-        var positions = _context.Positions.ToList();
-        return positions;
+        using (var scope = _serviceProvider.CreateScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            return context.Positions.ToList();
+        }
     }
 }

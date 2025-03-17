@@ -1,27 +1,32 @@
+using System.Globalization;
 using AlgoTradingAlpaca.Data;
 using AlgoTradingAlpaca.Interfaces;
 using AlgoTradingAlpaca.Models;
 
 namespace AlgoTradingAlpaca.Trading;
 
-public class TradingStrategy
+public class TradingStrategy : ITradingStrategy
 {
     private readonly ITradingClientService _tradingClientService;
     private readonly IBarDataService _barDataService;
     private readonly IPositionDataService _positionDataService;
+    private readonly IAccountDataService _accountDataService;
     private readonly AppDbContext _dbContext;
 
-    public TradingStrategy(ITradingClientService tradingClientService, IBarDataService barDataService, IPositionDataService positionDataService, AppDbContext dbContext)
+    public TradingStrategy(ITradingClientService tradingClientService, IBarDataService barDataService, IPositionDataService positionDataService, AppDbContext dbContext,
+        IAccountDataService accountDataService)
     {
         _tradingClientService = tradingClientService;
         _barDataService = barDataService;
         _positionDataService = positionDataService;
+        _accountDataService = accountDataService;
         _dbContext = dbContext;
     }
 
     public async Task ExecuteTradingStrategy()
     {
         var barData = await _barDataService.GetBarDataAsync();
+        
         
         var groupedAndSortedData = barData
             .GroupBy(bar => bar.Symbol)
@@ -51,6 +56,7 @@ public class TradingStrategy
     {
         if (barData.Count < 30)
         {
+            Console.WriteLine($"Not enough data for {symbol}");
             return;
         }
         
@@ -100,6 +106,7 @@ public class TradingStrategy
         }
         
         var bearishTrend = await BuildBearishTrend(orderedAndRecentBars, bearishTrendStart);
+        double bearishTrendLow = bearishTrend.Last().ClosingPrice;
 
         if (bearishTrend.Count < 3)
         {
@@ -122,7 +129,33 @@ public class TradingStrategy
             return;
         }
         
+        int quantity = await CalculateOrderQuantity();
+
+        if (quantity <= 0)
+        {
+            Console.WriteLine($"ERROR: {symbol}: Invalid quantity {quantity}");
+            return;
+        }
         
+        double takeProfit = await CalculateTakeProfit(lowestClosingPrice, bullishHigh, bearishTrendLow);
+        double stopLoss = Math.Round(lowestClosingPrice, 2);
+        
+        await _tradingClientService.PlaceMarketOrderAsync(symbol, quantity, "buy", currentPrice, takeProfit, stopLoss );
+        
+        _dbContext.Add(new Position
+        {
+            Symbol = symbol,
+            Qty = quantity,
+            AverageEntryPrice = currentPrice,
+            ClosingPrice = currentPrice,
+            OpenTime = DateTime.Now,
+            TakeProfit = takeProfit,
+            StopLoss = stopLoss,
+            Status = "Open",
+            Type = "Long"
+        });
+        await _dbContext.SaveChangesAsync();
+
     }
 
     private async Task<int> FindLowPointIndex(List<BarData> barData)
@@ -215,6 +248,41 @@ public class TradingStrategy
         }
         
         return bearishTrend;
+    }
+    
+    private async Task<int> CalculateOrderQuantity()
+    {
+        var account = await _accountDataService.GetAccountAsync();
+
+        var openPositions = _dbContext.Positions.Where(p => p.Status == "Open").Count();
+        
+        double accountBalance = Convert.ToDouble(account.buying_power, CultureInfo.InvariantCulture);
+
+        double cashToInvest;
+        double totalBuyingPowerPerPosition = accountBalance / 5;
+
+        if (openPositions >= 5)
+        {
+            return 0;
+        }
+
+        else
+        {
+            cashToInvest = totalBuyingPowerPerPosition;
+        }
+
+
+        return (int)totalBuyingPowerPerPosition;
+    }
+
+    private async Task<double> CalculateTakeProfit(double p1, double p2, double p3)
+    {
+        double midpointY = (p1 + p3) / 2;
+        double d = Math.Abs(p2 - midpointY);
+
+        double fibTarget = p2 + (p2 - p1) * 1.618;
+
+        return Math.Round(fibTarget, 2);
     }
     
     

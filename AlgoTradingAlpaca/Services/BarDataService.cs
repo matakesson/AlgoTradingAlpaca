@@ -7,16 +7,18 @@ namespace AlgoTradingAlpaca.Services;
 
 public class BarDataService : IBarDataService
 {
-    private AppDbContext _context;
-
-    public BarDataService(AppDbContext context)
+    private readonly IServiceProvider _serviceProvider;
+    public BarDataService(IServiceProvider serviceProvider)
     {
-        _context = context;
+        _serviceProvider = serviceProvider;
     }
 
     public async Task<List<BarData>> GetBarDataAsync()
     {
-        var barData = _context.BarData.ToList();
-        return barData;
+        using (var scope = _serviceProvider.CreateScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            return context.BarData.ToList();
+        }
     }
 }
