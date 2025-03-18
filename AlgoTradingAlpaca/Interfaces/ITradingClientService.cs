@@ -4,5 +4,7 @@ namespace AlgoTradingAlpaca.Interfaces;
 
 public interface ITradingClientService
 {
-    Task<OrderResponse> PlaceMarketOrderAsync(string symbol, int quantity, string side, double currentPrice, double takeProfit, double stopLoss);
+    Task<OrderResponse> PlaceMarketOrderAsync(string symbol, int quantity, string side);
+    Task<OrderResponse> CloseOrderAsync(string symbol, int percentage);
+
 }

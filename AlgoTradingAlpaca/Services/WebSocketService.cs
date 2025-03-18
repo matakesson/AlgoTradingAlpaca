@@ -131,36 +131,13 @@ public class WebSocketService : IWebSocketService
         {
             string messageType = typeElement.GetString();
 
-            if (messageType == "b") // For bars
+            if (messageType == "b") 
             {
-                if (element.TryGetProperty("S", out var symbolElement) &&
-                    element.TryGetProperty("o", out var openElement) &&
-                    element.TryGetProperty("h", out var highElement) &&
-                    element.TryGetProperty("l", out var lowElement) &&
-                    element.TryGetProperty("c", out var closeElement) &&
-                    element.TryGetProperty("t", out var timeElement) &&
-                    element.TryGetProperty("v", out var volumeElement))
+                using (var scope = _serviceProvider.CreateScope())
                 {
-                    var barData = new BarData()
-                    {
-                        Symbol = symbolElement.GetString(),
-                        OpenPrice = openElement.GetDouble(),
-                        HighPrice = highElement.GetDouble(),
-                        LowPrice = lowElement.GetDouble(),
-                        ClosingPrice = closeElement.GetDouble(),
-                        TimeStamp = DateTime.Parse(timeElement.GetString()),
-                        Volume = volumeElement.GetDouble()
-                    };
-
-                    using (var scope = _serviceProvider.CreateScope())
-                    {
-                        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                        dbContext.Add(barData);
-                        await dbContext.SaveChangesAsync();
-                    }
-                    
-                    Console.WriteLine($"Processed bar: {barData.Symbol} - Close: {barData.ClosingPrice}");
-                } 
+                    var barDataService = scope.ServiceProvider.GetRequiredService<IBarDataService>();
+                    await barDataService.ProcessBarData(element);
+                }
             }
         }
     }

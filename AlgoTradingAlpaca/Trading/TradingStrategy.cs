@@ -37,6 +37,7 @@ public class TradingStrategy : ITradingStrategy
 
         var positions = await _positionDataService.GetPositionsAsync();
 
+        
         foreach (var kvp in groupedAndSortedData)
         {
             var symbol = kvp.Key;
@@ -45,19 +46,83 @@ public class TradingStrategy : ITradingStrategy
             bool hasOpenPositions = positions
                 .Any(p => p.Symbol == symbol && p.Status == "Open");
             
+            var zigzagPoints = await ZigZagBars(bars);
+            
             if(!hasOpenPositions)
             {
-                await CalculateBullishReversalSignal(symbol, bars);
+                bool bullishReversalSignal = await CalculateBullishReversalSignal(symbol, bars);
+
+                if (bullishReversalSignal)
+                {
+                    if (zigzagPoints.Count >= 2)
+                    {
+                        var latestZigzagPoint = zigzagPoints.Last();
+                        var previousZigzagPoint = zigzagPoints[^2];
+                        double currentPrice = bars.Last().ClosingPrice;
+                        
+                        if (previousZigzagPoint.Type == "High" && latestZigzagPoint.Type == "Low" && currentPrice > latestZigzagPoint.Price)
+                        {
+                            var quantity = await CalculateOrderQuantity();
+                            await _tradingClientService.PlaceMarketOrderAsync(symbol, quantity, "buy"); 
+                            Console.WriteLine($"📈 Long Entry: Bought at {currentPrice}");
+                            
+                             _dbContext.Add(new Position
+                               {
+                               Symbol = symbol,
+                               Qty = quantity,
+                               AverageEntryPrice = currentPrice,
+                               ClosingPrice = currentPrice,
+                               OpenTime = DateTime.Now,
+                               Status = "Open",
+                               Type = "Long"
+                              });
+                        }
+                    }
+                }
+            }
+            
+            else if (hasOpenPositions)
+            {
+                if (zigzagPoints.Any())
+                {
+                    var latestZigzag =  zigzagPoints.Last();
+                    double currentPrice = bars.Last().ClosingPrice;
+                    var position = _dbContext.Positions.Where(s => s.Symbol == symbol && s.Status == "Open").FirstOrDefault();
+
+                    if (position.Type == "Long" && latestZigzag.Type == "low")
+                    {
+                        await _tradingClientService.CloseOrderAsync(symbol, 100);
+                        
+                        var existingPosition = _dbContext.Positions.Where(s => s.Symbol == symbol && s.Status == "Open").FirstOrDefault();
+                        if (existingPosition != null)
+                        {
+                            existingPosition.Status = "Closed";
+                            _dbContext.SaveChanges();
+                        }
+                    }
+
+                    if (position.Type == "Short" && latestZigzag.Type == "high")
+                    {
+                        await _tradingClientService.CloseOrderAsync(symbol, 100);
+                        
+                        var existingPosition = _dbContext.Positions.Where(s => s.Symbol == symbol && s.Status == "Open").FirstOrDefault();
+                        if (existingPosition != null)
+                        {
+                            existingPosition.Status = "Closed";
+                            _dbContext.SaveChanges();
+                        }
+                    }
+                }
             }
         }
     }
 
-    private async Task CalculateBullishReversalSignal(string symbol, List<BarData> barData)
+    private async Task<bool> CalculateBullishReversalSignal(string symbol, List<BarData> barData)
     {
         if (barData.Count < 30)
         {
             Console.WriteLine($"Not enough data for {symbol}");
-            return;
+            return false;
         }
         
         var orderedBars = barData.OrderBy(b => b.TimeStamp).ToList();
@@ -71,38 +136,38 @@ public class TradingStrategy : ITradingStrategy
 
         if (!validDownTrend)
         {
-            return;
+            return false;
         }
 
         if (!await IsValidLowPosition(orderedAndRecentBars, lowestIndex))
         {
-            return;
+            return false;
         }
         
         var bullishTrend = await BuildBullishTrend(orderedAndRecentBars, lowestIndex);
         if (bullishTrend.Count == 0)
         {
-            return;
+            return false;
         }
         var bullishTrendLength = bullishTrend.Count;
         var bullishHigh = bullishTrend[bullishTrendLength - 1].ClosingPrice;
 
         if (bullishHigh < 0)
         {
-            return;
+            return false;
         }
         
         var bullishHighIndex = lowestIndex + (bullishTrendLength -1);
 
         if (bullishHighIndex >= orderedAndRecentBars.Count)
         {
-            return;
+            return false;
         }
 
         var bearishTrendStart = bullishHighIndex + 1;
         if (bearishTrendStart >= orderedAndRecentBars.Count)
         {
-            return;
+            return false;
         }
         
         var bearishTrend = await BuildBearishTrend(orderedAndRecentBars, bearishTrendStart);
@@ -110,7 +175,7 @@ public class TradingStrategy : ITradingStrategy
 
         if (bearishTrend.Count < 3)
         {
-            return;
+            return false;
         }
         
         int bearishTrendIndex = bearishTrendStart + bearishTrend.Count - 1;
@@ -126,35 +191,37 @@ public class TradingStrategy : ITradingStrategy
 
         if (!breakoutDetected)
         {
-            return;
+            return false;
         }
-        
-        int quantity = await CalculateOrderQuantity();
 
-        if (quantity <= 0)
-        {
-            Console.WriteLine($"ERROR: {symbol}: Invalid quantity {quantity}");
-            return;
-        }
-        
-        double takeProfit = await CalculateTakeProfit(lowestClosingPrice, bullishHigh, bearishTrendLow);
-        double stopLoss = Math.Round(lowestClosingPrice, 2);
-        
-        await _tradingClientService.PlaceMarketOrderAsync(symbol, quantity, "buy", currentPrice, takeProfit, stopLoss );
-        
-        _dbContext.Add(new Position
-        {
-            Symbol = symbol,
-            Qty = quantity,
-            AverageEntryPrice = currentPrice,
-            ClosingPrice = currentPrice,
-            OpenTime = DateTime.Now,
-            TakeProfit = takeProfit,
-            StopLoss = stopLoss,
-            Status = "Open",
-            Type = "Long"
-        });
-        await _dbContext.SaveChangesAsync();
+        return true;
+
+        // int quantity = await CalculateOrderQuantity();
+        //
+        // if (quantity <= 0)
+        // {
+        //     Console.WriteLine($"ERROR: {symbol}: Invalid quantity {quantity}");
+        //     return;
+        // }
+        //
+        // double takeProfit = await CalculateTakeProfit(lowestClosingPrice, bullishHigh, bearishTrendLow);
+        // double stopLoss = Math.Round(lowestClosingPrice, 2);
+        //
+        // await _tradingClientService.PlaceMarketOrderAsync(symbol, quantity, "buy", currentPrice, takeProfit, stopLoss );
+        //
+        // _dbContext.Add(new Position
+        // {
+        //     Symbol = symbol,
+        //     Qty = quantity,
+        //     AverageEntryPrice = currentPrice,
+        //     ClosingPrice = currentPrice,
+        //     OpenTime = DateTime.Now,
+        //     TakeProfit = takeProfit,
+        //     StopLoss = stopLoss,
+        //     Status = "Open",
+        //     Type = "Long"
+        // });
+        // await _dbContext.SaveChangesAsync();
 
     }
 
@@ -265,13 +332,10 @@ public class TradingStrategy : ITradingStrategy
         {
             return 0;
         }
-
         else
         {
             cashToInvest = totalBuyingPowerPerPosition;
         }
-
-
         return (int)totalBuyingPowerPerPosition;
     }
 
@@ -283,6 +347,86 @@ public class TradingStrategy : ITradingStrategy
         double fibTarget = p2 + (p2 - p1) * 1.618;
 
         return Math.Round(fibTarget, 2);
+    }
+
+    private async Task<List<ZigZagPoint>> ZigZagBars(List<BarData> bars)
+    {
+        double percentage = 0.2;
+        var ZigZag = new List<ZigZagPoint>();
+        var knasturn = bars[bars.Count - 1].ClosingPrice;
+        int direction = 0;
+
+        if (bars.Count > 60)
+        {
+            for (int i = 0; i < bars.Count; i++)
+            {
+                var price =  bars[i].ClosingPrice;
+                var highest = bars[i].HighPrice;
+                var lowest = bars[i].LowPrice;
+
+                if (direction == 0)
+                {
+                    if (price > knasturn * (1 + percentage / 100))
+                    {
+                        direction = 1;
+                        ZigZag.Add(new ZigZagPoint
+                        {
+                            Index = i,
+                            Price = lowest,
+                            Type = "Low"
+                        });
+                    }
+                    else if (price < knasturn * (1 - percentage / 100))
+                    {
+                        direction = -1;
+                        ZigZag.Add(new ZigZagPoint
+                        {
+                            Index = i,
+                            Price = highest,
+                            Type = "High"
+                        });
+                    }
+                }
+                else if (direction == 1)
+                {
+                    if (highest > knasturn)
+                    {
+                        knasturn = highest;
+                    }
+                    else if (lowest < knasturn * (1 - percentage / 100))
+                    {
+                        ZigZag.Add(new ZigZagPoint
+                        {
+                            Index = i,
+                            Price = knasturn,
+                            Type = "High"
+                        });
+                        knasturn = lowest;
+                        direction = -1;
+                    }
+                }
+                else if (direction == -1)
+                {
+                    if (lowest < knasturn)
+                    {
+                        knasturn = lowest;
+                    }
+                    else if (highest > knasturn * (1 + percentage / 100))
+                    {
+                        ZigZag.Add(new ZigZagPoint
+                        {
+                            Index = i,
+                            Price = knasturn,
+                            Type = "Low"
+                        });
+                        knasturn = highest;
+                        direction = 1;
+                    }
+                }
+            }
+        }
+        return ZigZag;
+
     }
     
     

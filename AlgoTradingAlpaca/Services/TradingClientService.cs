@@ -23,8 +23,7 @@ public class TradingClientService : ITradingClientService
         _httpClient.DefaultRequestHeaders.Add("APCA-API-SECRET-KEY", _config.ApiSecret);
     }
 
-    public async Task<OrderResponse> PlaceMarketOrderAsync(string symbol, int quantity, string side, double currentPrice, double takeProfit,
-        double stopLoss)
+    public async Task<OrderResponse> PlaceMarketOrderAsync(string symbol, int quantity, string side)
     {
         if (quantity <= 0)
         {
@@ -44,8 +43,8 @@ public class TradingClientService : ITradingClientService
             type = "market",
             time_in_force = "gtc",
             market_class = "bracket",
-            take_profit = takeProfit,
-            stop_loss = stopLoss
+            // take_profit = takeProfit,
+            // stop_loss = stopLoss
         };
         
         var content = new StringContent(JsonSerializer.Serialize(order), Encoding.UTF8, "application/json");
@@ -76,6 +75,43 @@ public class TradingClientService : ITradingClientService
         catch (Exception ex)
         {
             Console.WriteLine(ex.Message);
+            throw;
+        }
+    }
+
+    public async Task<OrderResponse> CloseOrderAsync(string symbol, int percentage)
+    {
+        if (percentage <= 0 || percentage > 100)
+        {
+            throw new ArgumentOutOfRangeException(nameof(percentage), "Percentage must be between 1 and 100.");
+        }
+        
+        string url = $"positions/{symbol}?percentage={percentage}"; 
+
+        try
+        {
+            var response = await _httpClient.DeleteAsync(url); 
+            var responseBody = await response.Content.ReadAsStringAsync();
+
+            Console.WriteLine($"Raw API response: {responseBody}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                return JsonSerializer.Deserialize<OrderResponse>(responseBody);
+            }
+            else
+            {
+                if (response.StatusCode == HttpStatusCode.TooManyRequests)
+                {
+                    throw new Exception("Too many requests. Please wait before trying again.");
+                }
+
+                throw new Exception($"Error closing position: {responseBody}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Exception: {ex.Message}");
             throw;
         }
     }
