@@ -26,9 +26,15 @@ public class Program
         builder.Services.AddScoped<IPositionDataService, PositionDataService>();
         builder.Services.AddSingleton<IWebSocketService, WebSocketService>();
         builder.Services.AddScoped<IBarDataService, BarDataService>();
-        builder.Services.AddScoped<ITradingBotService, TradingBotService>();
         builder.Services.AddScoped<ITradingStrategy, TradingStrategy>();
         builder.Services.AddScoped<IAccountDataService, AccountDataService>();
+        builder.Services.AddSingleton<ITradingBotService, TradingBotService>();
+        
+       
+        builder.Services.AddSingleton<ITradingBotService, TradingBotService>();
+        builder.Services.AddHostedService<TradingBotService>(provider => 
+            (TradingBotService)provider.GetRequiredService<ITradingBotService>());
+
         
         builder.Services.AddControllers();
         builder.Services.AddEndpointsApiExplorer();

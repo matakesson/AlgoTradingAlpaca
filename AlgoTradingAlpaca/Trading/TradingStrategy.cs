@@ -24,98 +24,148 @@ public class TradingStrategy : ITradingStrategy
     }
 
     public async Task ExecuteTradingStrategy()
+{
+    Console.WriteLine("[STRATEGY] Starting strategy execution");
+    var barData = await _barDataService.GetBarDataAsync();
+    Console.WriteLine($"[DATA] Loaded {barData.Count} total bars");
+
+    var groupedAndSortedData = barData
+        .GroupBy(bar => bar.Symbol)
+        .ToDictionary(
+            group => group.Key,
+            group => group.OrderBy(bar => bar.TimeStamp).ToList()
+        );
+    
+    var positions = await _positionDataService.GetPositionsAsync();
+    Console.WriteLine($"[POSITIONS] Found {positions.Count} total positions");
+
+    var threeMinBars = GenerateThreeMinuteBars(groupedAndSortedData);
+    
+    foreach (var kvp in threeMinBars)
     {
-        var barData = await _barDataService.GetBarDataAsync();
-        
-        
-        var groupedAndSortedData = barData
-            .GroupBy(bar => bar.Symbol)
-            .ToDictionary(
-                group => group.Key,
-                group => group.OrderBy(bar => bar.TimeStamp).ToList()
-            );
+        var symbol = kvp.Key;
+        var bars = kvp.Value;
+        Console.WriteLine($"[SYMBOL] Processing {symbol} with {bars.Count} bars");
 
-        var positions = await _positionDataService.GetPositionsAsync();
+        bool hasOpenPositions = positions.Any(p => p.Symbol == symbol && p.Status == "Open");
+        Console.WriteLine($"[POSITION] {symbol} has open positions: {hasOpenPositions}");
 
-        
-        foreach (var kvp in groupedAndSortedData)
+        var zigzagPoints = await ZigZagBars(bars);
+        Console.WriteLine($"[ZIGZAG] {symbol} found {zigzagPoints.Count} zigzag points");
+
+        if(!hasOpenPositions)
         {
-            var symbol = kvp.Key;
-            var bars = kvp.Value;
+            Console.WriteLine($"[SIGNAL] Checking bullish reversal for {symbol}");
+            bool bullishReversalSignal = await CalculateBullishReversalSignal(symbol, bars);
 
-            bool hasOpenPositions = positions
-                .Any(p => p.Symbol == symbol && p.Status == "Open");
-            
-            var zigzagPoints = await ZigZagBars(bars);
-            
-            if(!hasOpenPositions)
+            if (bullishReversalSignal)
             {
-                bool bullishReversalSignal = await CalculateBullishReversalSignal(symbol, bars);
-
-                if (bullishReversalSignal)
+                Console.WriteLine($"[SIGNAL] Bullish reversal detected for {symbol}");
+                if (zigzagPoints.Count >= 2)
                 {
-                    if (zigzagPoints.Count >= 2)
+                    var latestZigzagPoint = zigzagPoints.Last();
+                    var previousZigzagPoint = zigzagPoints[^2];
+                    double currentPrice = bars.Last().ClosingPrice;
+                    
+                    Console.WriteLine($"[ZIGZAG] Last 2 points: {previousZigzagPoint.Type}@{previousZigzagPoint.Price} -> " +
+                                     $"{latestZigzagPoint.Type}@{latestZigzagPoint.Price}");
+                    
+                    if (previousZigzagPoint.Type == "High" && latestZigzagPoint.Type == "Low" && currentPrice > latestZigzagPoint.Price)
                     {
-                        var latestZigzagPoint = zigzagPoints.Last();
-                        var previousZigzagPoint = zigzagPoints[^2];
-                        double currentPrice = bars.Last().ClosingPrice;
+                        Console.WriteLine($"[ENTRY] Valid pattern detected for {symbol}");
+                        var calcQuantity = await CalculateOrderQuantity();
+                        int quantity = (int)(calcQuantity/ currentPrice);
                         
-                        if (previousZigzagPoint.Type == "High" && latestZigzagPoint.Type == "Low" && currentPrice > latestZigzagPoint.Price)
+                        Console.WriteLine($"[ORDER] Calculated quantity: {quantity}");
+
+                        if(quantity > 0)
                         {
-                            var quantity = await CalculateOrderQuantity();
                             await _tradingClientService.PlaceMarketOrderAsync(symbol, quantity, "buy"); 
-                            Console.WriteLine($"📈 Long Entry: Bought at {currentPrice}");
+                            Console.WriteLine($"📈 [EXECUTION] Long Entry: {quantity} shares bought at {currentPrice}");
                             
-                             _dbContext.Add(new Position
-                               {
-                               Symbol = symbol,
-                               Qty = quantity,
-                               AverageEntryPrice = currentPrice,
-                               ClosingPrice = currentPrice,
-                               OpenTime = DateTime.Now,
-                               Status = "Open",
-                               Type = "Long"
-                              });
+                            _dbContext.Add(new Position
+                            {
+                                Symbol = symbol,
+                                Qty = quantity,
+                                AverageEntryPrice = currentPrice,
+                                ClosingPrice = currentPrice,
+                                OpenTime = DateTime.Now,
+                                Status = "Open",
+                                Type = "Long"
+                            });
+                            await _dbContext.SaveChangesAsync();
+                            Console.WriteLine($"[DATABASE] New position saved for {symbol}");
                         }
+                        else
+                        {
+                            Console.WriteLine($"[ERROR] Invalid quantity for {symbol}: {quantity}");
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[ENTRY] Pattern mismatch for {symbol}");
                     }
                 }
-            }
-            
-            else if (hasOpenPositions)
-            {
-                if (zigzagPoints.Any())
+                else
                 {
-                    var latestZigzag =  zigzagPoints.Last();
-                    double currentPrice = bars.Last().ClosingPrice;
-                    var position = _dbContext.Positions.Where(s => s.Symbol == symbol && s.Status == "Open").FirstOrDefault();
+                    Console.WriteLine($"[ENTRY] Insufficient zigzag points ({zigzagPoints.Count}) for {symbol}");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"[SIGNAL] No bullish reversal for {symbol}");
+            }
+        }
+        else
+        {
+            // Existing position management code
+            if (zigzagPoints.Any())
+            {
+                var latestZigzag = zigzagPoints.Last();
+                Console.WriteLine($"[EXIT] Checking exit conditions for {symbol}");
+                double currentPrice = bars.Last().ClosingPrice;
+                var position = _dbContext.Positions.FirstOrDefault(s => s.Symbol == symbol && s.Status == "Open");
 
-                    if (position.Type == "Long" && latestZigzag.Type == "low")
+                if(position == null)
+                {
+                    Console.WriteLine($"[ERROR] No open position found for {symbol}");
+                    continue;
+                }
+
+                if (position.Type == "Long" && latestZigzag.Type.Equals("low", StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.WriteLine($"[EXIT] Long exit signal detected for {symbol}");
+                    await _tradingClientService.CloseOrderAsync(symbol, 100);
+                    
+                    var existingPosition = _dbContext.Positions.FirstOrDefault(s => s.Symbol == symbol && s.Status == "Open");
+                    if (existingPosition != null)
                     {
-                        await _tradingClientService.CloseOrderAsync(symbol, 100);
-                        
-                        var existingPosition = _dbContext.Positions.Where(s => s.Symbol == symbol && s.Status == "Open").FirstOrDefault();
-                        if (existingPosition != null)
-                        {
-                            existingPosition.Status = "Closed";
-                            _dbContext.SaveChanges();
-                        }
+                        existingPosition.Status = "Closed";
+                        await _dbContext.SaveChangesAsync();
+                        Console.WriteLine($"[EXIT] Closed long position for {symbol}");
                     }
+                }
 
-                    if (position.Type == "Short" && latestZigzag.Type == "high")
+                if (position.Type == "Short" && latestZigzag.Type.Equals("high", StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.WriteLine($"[EXIT] Short exit signal detected for {symbol}");
+                    await _tradingClientService.CloseOrderAsync(symbol, 100);
+                    
+                    var existingPosition = _dbContext.Positions.FirstOrDefault(s => s.Symbol == symbol && s.Status == "Open");
+                    if (existingPosition != null)
                     {
-                        await _tradingClientService.CloseOrderAsync(symbol, 100);
-                        
-                        var existingPosition = _dbContext.Positions.Where(s => s.Symbol == symbol && s.Status == "Open").FirstOrDefault();
-                        if (existingPosition != null)
-                        {
-                            existingPosition.Status = "Closed";
-                            _dbContext.SaveChanges();
-                        }
+                        existingPosition.Status = "Closed";
+                        await _dbContext.SaveChangesAsync();
+                        Console.WriteLine($"[EXIT] Closed short position for {symbol}");
                     }
                 }
             }
         }
     }
+    Console.WriteLine("[STRATEGY] Execution completed");
+}
+
+
 
     private async Task<bool> CalculateBullishReversalSignal(string symbol, List<BarData> barData)
     {
@@ -132,7 +182,7 @@ public class TradingStrategy : ITradingStrategy
         var lowestClosingPrice = orderedAndRecentBars[lowestIndex].ClosingPrice;
 
         var validDownTrend = await IsValidDownTrend(orderedAndRecentBars, lowestClosingPrice, lowestIndex,
-            lookbackBars: 5, minimumPercent: 0.005);
+            lookbackBars: 5, minimumPercent: 0.003);
 
         if (!validDownTrend)
         {
@@ -184,7 +234,7 @@ public class TradingStrategy : ITradingStrategy
         bool breakoutDetected = false;
         double currentPrice = orderedAndRecentBars.Last().ClosingPrice;
         double priceOneBarsAgo = orderedAndRecentBars[orderedAndRecentBars.Count - 1].ClosingPrice;
-        if (currentPrice > bullishHigh && priceOneBarsAgo < bullishHigh)
+        if (currentPrice > bullishHigh)
         {
             breakoutDetected = true;
         }
@@ -227,7 +277,7 @@ public class TradingStrategy : ITradingStrategy
 
     private async Task<int> FindLowPointIndex(List<BarData> barData)
     {
-        double lowestPoint = 0;
+        double lowestPoint = Double.MaxValue;
         int index = -1;
         for (int i = 0; i < barData.Count; i++)
         {
@@ -259,6 +309,12 @@ public class TradingStrategy : ITradingStrategy
             {
                 highestPrice = bars[i].ClosingPrice;
                 highestPriceIndex = i;
+                
+                bullishTrend.Add(bars[i]);
+            }
+            else
+            {
+                if (bullishTrend.Count > 1) break;
             }
         }
         return bullishTrend;
@@ -350,84 +406,173 @@ public class TradingStrategy : ITradingStrategy
     }
 
     private async Task<List<ZigZagPoint>> ZigZagBars(List<BarData> bars)
+{
+    double percentage = 0.2;
+    var zigZag = new List<ZigZagPoint>();
+    
+    if (bars.Count <= 30) return zigZag;
+    
+    double currentHigh = bars[0].HighPrice;
+    double currentLow = bars[0].LowPrice;
+    int lastDirection = 0; 
+    
+    for (int i = 1; i < Math.Min(5, bars.Count); i++)
     {
-        double percentage = 0.2;
-        var ZigZag = new List<ZigZagPoint>();
-        var knasturn = bars[bars.Count - 1].ClosingPrice;
-        int direction = 0;
-
-        if (bars.Count > 60)
-        {
-            for (int i = 0; i < bars.Count; i++)
-            {
-                var price =  bars[i].ClosingPrice;
-                var highest = bars[i].HighPrice;
-                var lowest = bars[i].LowPrice;
-
-                if (direction == 0)
-                {
-                    if (price > knasturn * (1 + percentage / 100))
-                    {
-                        direction = 1;
-                        ZigZag.Add(new ZigZagPoint
-                        {
-                            Index = i,
-                            Price = lowest,
-                            Type = "Low"
-                        });
-                    }
-                    else if (price < knasturn * (1 - percentage / 100))
-                    {
-                        direction = -1;
-                        ZigZag.Add(new ZigZagPoint
-                        {
-                            Index = i,
-                            Price = highest,
-                            Type = "High"
-                        });
-                    }
-                }
-                else if (direction == 1)
-                {
-                    if (highest > knasturn)
-                    {
-                        knasturn = highest;
-                    }
-                    else if (lowest < knasturn * (1 - percentage / 100))
-                    {
-                        ZigZag.Add(new ZigZagPoint
-                        {
-                            Index = i,
-                            Price = knasturn,
-                            Type = "High"
-                        });
-                        knasturn = lowest;
-                        direction = -1;
-                    }
-                }
-                else if (direction == -1)
-                {
-                    if (lowest < knasturn)
-                    {
-                        knasturn = lowest;
-                    }
-                    else if (highest > knasturn * (1 + percentage / 100))
-                    {
-                        ZigZag.Add(new ZigZagPoint
-                        {
-                            Index = i,
-                            Price = knasturn,
-                            Type = "Low"
-                        });
-                        knasturn = highest;
-                        direction = 1;
-                    }
-                }
-            }
-        }
-        return ZigZag;
-
+        if (bars[i].HighPrice > currentHigh)
+            currentHigh = bars[i].HighPrice;
+        if (bars[i].LowPrice < currentLow)
+            currentLow = bars[i].LowPrice;
     }
     
+    double highLowRatio = (bars[0].HighPrice / currentHigh);
+    double lowHighRatio = (bars[0].LowPrice / currentLow);
     
+    if (highLowRatio < lowHighRatio) 
+    {
+        zigZag.Add(new ZigZagPoint
+        {
+            Index = 0,
+            Price = bars[0].HighPrice,
+            Type = "High"
+        });
+        lastDirection = -1; 
+    }
+    else 
+    {
+        zigZag.Add(new ZigZagPoint
+        {
+            Index = 0,
+            Price = bars[0].LowPrice,
+            Type = "Low"
+        });
+        lastDirection = 1; 
+    }
+    
+    double swingHigh = bars[0].HighPrice;
+    double swingLow = bars[0].LowPrice;
+    int swingHighIndex = 0;
+    int swingLowIndex = 0;
+    
+    for (int i = 1; i < bars.Count; i++)
+    {
+        if (bars[i].HighPrice > swingHigh)
+        {
+            swingHigh = bars[i].HighPrice;
+            swingHighIndex = i;
+        }
+        
+        if (bars[i].LowPrice < swingLow)
+        {
+            swingLow = bars[i].LowPrice;
+            swingLowIndex = i;
+        }
+        
+        if (lastDirection == -1) 
+        {
+            double lastHighPrice = zigZag.Last().Price;
+            
+            if (swingLow < lastHighPrice * (1 - percentage / 100))
+            {
+                zigZag.Add(new ZigZagPoint
+                {
+                    Index = swingLowIndex,
+                    Price = swingLow,
+                    Type = "Low"
+                });
+                
+                swingHigh = bars[i].HighPrice;
+                swingHighIndex = i;
+                
+                lastDirection = 1;
+            }
+        }
+        else if (lastDirection == 1) 
+        {
+            double lastLowPrice = zigZag.Last().Price;
+            
+            if (swingHigh > lastLowPrice * (1 + percentage / 100))
+            {
+                zigZag.Add(new ZigZagPoint
+                {
+                    Index = swingHighIndex,
+                    Price = swingHigh,
+                    Type = "High"
+                });
+                
+                swingLow = bars[i].LowPrice;
+                swingLowIndex = i;
+                
+                lastDirection = -1;
+            }
+        }
+    }
+    
+    for (int i = 1; i < zigZag.Count; i++)
+    {
+        if (zigZag[i].Type == zigZag[i-1].Type)
+        {
+            // If we have two consecutive points of the same type, remove the one with the less extreme value
+            if (zigZag[i].Type == "High")
+            {
+                if (zigZag[i].Price > zigZag[i-1].Price)
+                    zigZag.RemoveAt(i-1);
+                else
+                    zigZag.RemoveAt(i);
+                i--; 
+            }
+            else 
+            {
+                if (zigZag[i].Price < zigZag[i-1].Price)
+                    zigZag.RemoveAt(i-1);
+                else
+                    zigZag.RemoveAt(i);
+            }
+        }
+    }
+    
+    Console.WriteLine($"[ZIGZAG] Generated {zigZag.Count} points with alternating High/Low pattern");
+    return zigZag;
+}
+
+    private Dictionary<string, List<BarData>> GenerateThreeMinuteBars(Dictionary<string, List<BarData>> groupedData)
+    {
+        var threeMinuteBars = new Dictionary<string, List<BarData>>();
+
+        foreach (var symbol in groupedData.Keys)
+        {
+            var bars = groupedData[symbol];
+            var threeMinBarsForSymbol = new List<BarData>();
+        
+            
+            if (bars.Count < 3)
+            {
+                Console.WriteLine($"[3MIN] Skipping {symbol} - insufficient bars ({bars.Count})");
+                continue;
+            }
+
+            for (int i = 0; i < bars.Count; i += 3)
+            {
+                var subset = bars.Skip(i).Take(3).ToList();
+                if (subset.Count < 3) break;
+
+                var threeMinBar = new BarData
+                {
+                    Symbol = symbol,
+                    OpenPrice = subset.First().OpenPrice,
+                    HighPrice = subset.Max(b => b.HighPrice),
+                    LowPrice = subset.Min(b => b.LowPrice),
+                    ClosingPrice = subset.Last().ClosingPrice,
+                    TimeStamp = subset.Last().TimeStamp,
+                    Volume = subset.Sum(b => b.Volume)
+                };
+                threeMinBarsForSymbol.Add(threeMinBar);
+            }
+
+            if (threeMinBarsForSymbol.Count > 0)
+            {
+                threeMinuteBars[symbol] = threeMinBarsForSymbol;
+            }
+        }
+        return threeMinuteBars;
+    }
 }

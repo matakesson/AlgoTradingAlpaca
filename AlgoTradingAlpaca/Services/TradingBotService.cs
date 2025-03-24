@@ -4,14 +4,14 @@ namespace AlgoTradingAlpaca.Services;
 
 public class TradingBotService : BackgroundService, ITradingBotService
 {
-    private readonly ITradingStrategy _tradingStrategy;
     private bool _isTradingEnabled;
+    private readonly IServiceProvider _serviceProvider;
 
     public bool IsTradingEnabled => _isTradingEnabled;
     
-    public TradingBotService(ITradingStrategy tradingStrategy)
+    public TradingBotService(IServiceProvider serviceProvider)
     {
-        _tradingStrategy = tradingStrategy;
+        _serviceProvider = serviceProvider;
         _isTradingEnabled = false;
     }
 
@@ -37,7 +37,14 @@ public class TradingBotService : BackgroundService, ITradingBotService
             if (_isTradingEnabled)
             {
                 Console.WriteLine("Executing trading strategy...");
-                await _tradingStrategy.ExecuteTradingStrategy();
+
+                using (var scope = _serviceProvider.CreateScope())
+                {
+                    var tradingStrategy = scope.ServiceProvider.GetRequiredService<ITradingStrategy>();
+
+                    await tradingStrategy.ExecuteTradingStrategy();
+                }
+                
             }
             else
             {

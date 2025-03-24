@@ -137,6 +137,7 @@ public class WebSocketService : IWebSocketService
                 {
                     var barDataService = scope.ServiceProvider.GetRequiredService<IBarDataService>();
                     await barDataService.ProcessBarData(element);
+                    
                 }
             }
         }

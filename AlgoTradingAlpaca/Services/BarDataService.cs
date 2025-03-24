@@ -50,26 +50,12 @@ public class BarDataService : IBarDataService
 
             _barList.Add(barData);
 
-            if (_barList.Count == 3)
-            {
-                var threeMinuteBar = new BarData
-                {
-                    Symbol = _barList.First().Symbol,
-                    OpenPrice = _barList.First().OpenPrice,
-                    HighPrice = _barList.Max(b => b.HighPrice),
-                    LowPrice = _barList.Min(b => b.LowPrice),
-                    ClosingPrice = _barList.Last().ClosingPrice,
-                    TimeStamp = _barList.Last().TimeStamp, 
-                    Volume = _barList.Sum(b => b.Volume)
-                };
+            
+            _context.Add(barData);
+            await _context.SaveChangesAsync();
                 
-                _context.Add(threeMinuteBar);
-                await _context.SaveChangesAsync();
-                
-                Console.WriteLine($"3-Min Bar: {threeMinuteBar.Symbol} | Open: {threeMinuteBar.OpenPrice} | High: {threeMinuteBar.HighPrice} | Low: {threeMinuteBar.LowPrice} | Close: {threeMinuteBar.ClosingPrice} | Volume: {threeMinuteBar.Volume}");
-                
-                _barList.Clear();
-            }
+            _barList.Clear();
+            
             
                     
         } 
