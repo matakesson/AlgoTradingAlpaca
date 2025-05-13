@@ -21,4 +21,23 @@ public class PositionDataService : IPositionDataService
             return context.Positions.ToList();
         }
     }
+
+    public async Task AddPositionAsync(Position position)
+    {
+        using var scope = _serviceProvider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        context.Positions.Add(position);
+        await context.SaveChangesAsync();
+    }
+
+    public async Task UpdatePositionAsync(Position position)
+    {
+        using (var scope = _serviceProvider.CreateScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            context.Positions.Update(position);
+            await context.SaveChangesAsync();
+        }
+    }
 }

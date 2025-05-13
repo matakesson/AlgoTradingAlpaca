@@ -17,8 +17,28 @@ public class TradingBotService : BackgroundService, ITradingBotService
 
     public Task StartTradingAsync()
     {
-        _isTradingEnabled = true;
-        Console.WriteLine("Trading enabled.");
+        _ = Task.Run(async () =>
+        {
+            while (!_isTradingEnabled)
+            {
+                var now = DateTime.Now;
+                var marketOpen = new TimeSpan(15, 30, 0);
+                var marketClose = new TimeSpan(22, 0, 0);
+                bool isWeekday = now.DayOfWeek >= DayOfWeek.Monday && now.DayOfWeek <= DayOfWeek.Friday;
+                bool isOpen = now.TimeOfDay >= marketOpen && now.TimeOfDay <= marketClose;
+
+                if (isWeekday && isOpen)
+                {
+                    _isTradingEnabled = true;
+                    Console.WriteLine("Trading enabled.");
+                    break;
+                }
+
+                Console.WriteLine("Waiting for market to open... rechecking in 1 minute.");
+                await Task.Delay(TimeSpan.FromMinutes(1));
+            }
+        });
+
         return Task.CompletedTask;
     }
 
@@ -41,7 +61,6 @@ public class TradingBotService : BackgroundService, ITradingBotService
                 using (var scope = _serviceProvider.CreateScope())
                 {
                     var tradingStrategy = scope.ServiceProvider.GetRequiredService<ITradingStrategy>();
-
                     await tradingStrategy.ExecuteTradingStrategy();
                 }
                 

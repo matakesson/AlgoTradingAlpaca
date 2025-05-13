@@ -14,8 +14,7 @@ public class WebSocketService : IWebSocketService
 {
     private readonly AlpacaConfig _config;
     private ClientWebSocket _barsWebSocket;
-    
-    private IServiceProvider _serviceProvider;
+    private readonly IServiceProvider _serviceProvider;
 
     public WebSocketService(IOptions<AlpacaConfig> configOptions, IServiceProvider serviceProvider)
     {
@@ -29,12 +28,30 @@ public class WebSocketService : IWebSocketService
         {
             Console.WriteLine("Bars Websocket is already running");
         }
-
+        
+        _config.WebSocketBarsUrl = IsMarketOpen() 
+            ? "wss://stream.data.alpaca.markets/v2/iex"
+            : "wss://stream.data.alpaca.markets/v2/delayed_sip";
+        
+        
         await ConnectToBarsWebSocketAsync();
         await SubScribeToBarsWebSocketAsync(symbols);
         _ = Task.Run(() => ReceiveMessageAsync(_barsWebSocket));
     }
 
+    private bool IsMarketOpen()
+    {
+        var now = DateTime.Now;
+        
+        var marketOpen = new TimeSpan(15, 30, 0);
+        var marketClose = new TimeSpan(22, 0, 0);
+
+        bool isWeekday = now.DayOfWeek is >= DayOfWeek.Monday and <= DayOfWeek.Friday;
+        bool isOpen = now.TimeOfDay >= marketOpen && now.TimeOfDay <= marketClose;
+
+        return isWeekday && isOpen;
+    }
+    
     private async Task ConnectToBarsWebSocketAsync()
     {
         _barsWebSocket = new ClientWebSocket();

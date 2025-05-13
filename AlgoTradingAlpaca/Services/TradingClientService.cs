@@ -23,7 +23,7 @@ public class TradingClientService : ITradingClientService
         _httpClient.DefaultRequestHeaders.Add("APCA-API-SECRET-KEY", _config.ApiSecret);
     }
 
-    public async Task<OrderResponse> PlaceMarketOrderAsync(string symbol, int quantity, string side)
+    public async Task<OrderResponse> PlaceMarketOrderAsync(string symbol, int quantity, string side, double entryPrice, double takeProfit, double stopLoss)
     {
         if (quantity <= 0)
         {
@@ -43,8 +43,8 @@ public class TradingClientService : ITradingClientService
             type = "market",
             time_in_force = "gtc",
             market_class = "bracket",
-            // take_profit = takeProfit,
-            // stop_loss = stopLoss
+            take_profit = new { limit_price = takeProfit },
+            stop_loss = new { stop_price = stopLoss }
         };
         
         var content = new StringContent(JsonSerializer.Serialize(order), Encoding.UTF8, "application/json");
