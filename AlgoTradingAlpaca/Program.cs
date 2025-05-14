@@ -39,6 +39,17 @@ public class Program
         builder.Services.AddControllers();
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
+        
+        builder.Services.AddCors(options =>
+        {
+            options.AddPolicy("AllowReactLocalhost", policy =>
+            {
+                policy
+                    .WithOrigins("http://localhost:3000") // React dev server
+                    .AllowAnyMethod()
+                    .AllowAnyHeader();
+            });
+        });
 
         var app = builder.Build();
 
@@ -49,6 +60,8 @@ public class Program
             app.UseSwaggerUI();
         }
 
+        app.UseCors("AllowReactLocalhost");
+        
         app.UseHttpsRedirection();
         app.UseAuthorization();
         app.MapControllers();

@@ -20,4 +20,11 @@ public class TradingBotController : Controller
         await _tradingBotService.StartTradingAsync();
         return Ok("Trading bot started");
     }
+
+    [HttpPost("Stop")]
+    public async Task<IActionResult> StopBot()
+    {
+        await _tradingBotService.StopTradingAsync();
+        return Ok("Trading bot stopped");
+    }
 }

@@ -42,7 +42,7 @@ public class TradingClientService : ITradingClientService
             side = side.ToLower(),
             type = "market",
             time_in_force = "gtc",
-            market_class = "bracket",
+            order_class = "bracket",
             take_profit = new { limit_price = takeProfit },
             stop_loss = new { stop_price = stopLoss }
         };

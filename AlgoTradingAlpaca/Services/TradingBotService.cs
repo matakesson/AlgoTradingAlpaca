@@ -5,21 +5,25 @@ namespace AlgoTradingAlpaca.Services;
 public class TradingBotService : BackgroundService, ITradingBotService
 {
     private bool _isTradingEnabled;
+    private bool _isReconnecting;
     private readonly IServiceProvider _serviceProvider;
 
     public bool IsTradingEnabled => _isTradingEnabled;
+    public bool IsReconnecting => _isReconnecting;
     
     public TradingBotService(IServiceProvider serviceProvider)
     {
         _serviceProvider = serviceProvider;
         _isTradingEnabled = false;
+        _isReconnecting = false;
     }
 
     public Task StartTradingAsync()
     {
+        _isReconnecting = true;
         _ = Task.Run(async () =>
         {
-            while (!_isTradingEnabled)
+            while (_isReconnecting)
             {
                 var now = DateTime.Now;
                 var marketOpen = new TimeSpan(15, 30, 0);
@@ -30,6 +34,7 @@ public class TradingBotService : BackgroundService, ITradingBotService
                 if (isWeekday && isOpen)
                 {
                     _isTradingEnabled = true;
+                    _isReconnecting = false;
                     Console.WriteLine("Trading enabled.");
                     break;
                 }
@@ -45,6 +50,7 @@ public class TradingBotService : BackgroundService, ITradingBotService
     public Task StopTradingAsync()
     {
         _isTradingEnabled = false;
+        _isReconnecting = false;
         Console.WriteLine("Trading disabled.");
         return Task.CompletedTask;
     }

@@ -62,6 +62,11 @@ public class TradingStrategy : ITradingStrategy
                 if (signal is { IsBreakout: true })
                 {
                     double takeProfit = CalculateTakeProfit(signal.Point1, signal.Point2, "Long");
+                    if (takeProfit <= signal.EntryPrice)
+                    {
+                        double fallbackMove = (signal.EntryPrice - signal.Point1) * 1.618;
+                        takeProfit = Math.Round(signal.EntryPrice + fallbackMove, 2);
+                    }
                     double stopLoss = Math.Round(signal.Point1, 2);
                     int quantity = await CalculateOrderQuantity(stopLoss, signal.EntryPrice, "Long");  
                     
@@ -288,11 +293,10 @@ public class TradingStrategy : ITradingStrategy
 
     private double CalculateTakeProfit(double p1, double p2, string direction)
     {
-        double diff = Math.Abs(p2 - p1);
-        double fibMove = diff * 1.618;
+        double fibMove = Math.Abs(p1 - p2) * 1.618;
 
         return direction == "Long"
-            ? Math.Round(p2 + fibMove, 2)  
+            ? Math.Round(p1 + fibMove, 2) 
             : Math.Round(p2 - fibMove, 2); 
     }
 }
