@@ -18,7 +18,7 @@ public class PositionDataService : IPositionDataService
         using (var scope = _serviceProvider.CreateScope())
         {
             var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            return context.Positions.ToList();
+            return context.Positions.Where(p => p.Status == "Open").ToList();
         }
     }
 

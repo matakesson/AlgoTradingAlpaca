@@ -49,15 +49,28 @@ public class BarDataService : IBarDataService
             };
 
             _barList.Add(barData);
-
-            
             _context.Add(barData);
+
             await _context.SaveChangesAsync();
-                
-            _barList.Clear();
+            await UpdatePositionsLastPrice(barData);
             
             
-                    
+            _barList.Clear();    
         } 
+    }
+
+    private async Task UpdatePositionsLastPrice(BarData barData)
+    {
+        var position = await _context.Positions.FirstOrDefaultAsync(p => p.Symbol == barData.Symbol && p.Status == "Open");
+
+        if (position != null)
+        {
+            position.ClosingPrice = barData.ClosingPrice;
+            Console.WriteLine(position);
+            _context.Update(position);
+                    
+            await _context.SaveChangesAsync();
+        }
+        
     }
 }

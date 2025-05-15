@@ -61,7 +61,7 @@ public class TradingStrategy : ITradingStrategy
                 Console.WriteLine($"[SIGNAL]: {symbol} breakout: {signal}");
                 if (signal is { IsBreakout: true })
                 {
-                    double takeProfit = CalculateTakeProfit(signal.Point1, signal.Point2, "Long");
+                    double takeProfit = CalculateTakeProfit(signal.Point1, signal.EntryPrice, "Long");
                     if (takeProfit <= signal.EntryPrice)
                     {
                         double fallbackMove = (signal.EntryPrice - signal.Point1) * 1.618;
@@ -98,7 +98,7 @@ public class TradingStrategy : ITradingStrategy
                 Console.WriteLine($"[SIGNAL]: {symbol} breakout: {shortSignal}");
                 if (shortSignal is { IsBreakout: true })
                 {
-                    double takeProfit = CalculateTakeProfit(shortSignal.Point1, shortSignal.Point2, "short");
+                    double takeProfit = CalculateTakeProfit(shortSignal.Point1, shortSignal.EntryPrice, "short");
                     double stopLoss = Math.Round(shortSignal.Point1, 2);
                     int quantity = await CalculateOrderQuantity(stopLoss, shortSignal.EntryPrice, "Short");    
                     
@@ -291,12 +291,13 @@ public class TradingStrategy : ITradingStrategy
         return Math.Min(qtyByRiskShort, qtyByCapitalShort);
     }
 
-    private double CalculateTakeProfit(double p1, double p2, string direction)
+    private double CalculateTakeProfit(double p1, double entry, string direction)
     {
-        double fibMove = Math.Abs(p1 - p2) * 1.618;
-
+        double risk = Math.Abs(entry - p1);
+        double rewardMultiplier = 1.2;
+        
         return direction == "Long"
-            ? Math.Round(p1 + fibMove, 2) 
-            : Math.Round(p2 - fibMove, 2); 
+            ? Math.Round(entry + (risk * rewardMultiplier), 2) 
+            : Math.Round(entry - (risk * rewardMultiplier), 2); 
     }
 }
