@@ -40,10 +40,10 @@ public class CalculateBullishReversal : ICalculateBullishReversal
         double currentPrice = recentBars.Last().ClosingPrice;
         double prevPrice = recentBars[recentBars.Count - 2].ClosingPrice;
         bool isBreakout = currentPrice > bullishHigh;
-        Console.WriteLine(currentPrice);
         if (!isBreakout)
             return null;
         
+        Console.WriteLine("Should buy");
         return new TradeSignalResult
         {
             IsBreakout = true,

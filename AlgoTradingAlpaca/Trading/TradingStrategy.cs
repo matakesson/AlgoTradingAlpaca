@@ -68,30 +68,32 @@ public class TradingStrategy : ITradingStrategy
                         takeProfit = Math.Round(signal.EntryPrice + fallbackMove, 2);
                     }
                     double stopLoss = Math.Round(signal.Point1, 2);
-                    int quantity = await CalculateOrderQuantity(stopLoss, signal.EntryPrice, "Long");  
-                    
-                    await _tradingClientService.PlaceMarketOrderAsync(
-                        symbol,
-                        quantity,
-                        "buy",
-                        signal.EntryPrice,
-                        takeProfit,
-                        stopLoss
-                    );
-
-                    var position = new Position
+                    int quantity = await CalculateOrderQuantity(stopLoss, signal.EntryPrice, "Long");
+                    if (quantity != 0)
                     {
-                        Symbol = symbol,
-                        Qty = quantity,
-                        AverageEntryPrice = signal.EntryPrice,
-                        OpenTime = DateTime.Now,
-                        TakeProfit = takeProfit,
-                        StopLoss = stopLoss,
-                        Status = "Open",
-                        Type = "Long"
-                    };
+                        await _tradingClientService.PlaceMarketOrderAsync(
+                            symbol,
+                            quantity,
+                            "buy",
+                            signal.EntryPrice,
+                            takeProfit,
+                            stopLoss
+                        );
+
+                        var position = new Position
+                        {
+                            Symbol = symbol,
+                            Qty = quantity,
+                            AverageEntryPrice = signal.EntryPrice,
+                            OpenTime = DateTime.Now,
+                            TakeProfit = takeProfit,
+                            StopLoss = stopLoss,
+                            Status = "Open",
+                            Type = "Long"
+                        };
                 
-                    await _positionDataService.AddPositionAsync(position);
+                        await _positionDataService.AddPositionAsync(position);
+                    }
                 }
 
                 var shortSignal = await _calculateBearishReversal.CalculateBearishReversalSignal(barData);
@@ -100,30 +102,32 @@ public class TradingStrategy : ITradingStrategy
                 {
                     double takeProfit = CalculateTakeProfit(shortSignal.Point1, shortSignal.EntryPrice, "short");
                     double stopLoss = Math.Round(shortSignal.Point1, 2);
-                    int quantity = await CalculateOrderQuantity(stopLoss, shortSignal.EntryPrice, "Short");    
-                    
-                    await _tradingClientService.PlaceMarketOrderAsync(
-                        symbol,
-                        quantity,
-                        "sell",
-                        shortSignal.EntryPrice,
-                        takeProfit,
-                        stopLoss
-                    );
-
-                    var position = new Position
+                    int quantity = await CalculateOrderQuantity(stopLoss, shortSignal.EntryPrice, "Short");
+                    if (quantity != 0)
                     {
-                        Symbol = symbol,
-                        Qty = quantity,
-                        AverageEntryPrice = shortSignal.EntryPrice,
-                        OpenTime = DateTime.Now,
-                        TakeProfit = takeProfit,
-                        StopLoss = stopLoss,
-                        Status = "Open",
-                        Type = "Short"
-                    };
+                        await _tradingClientService.PlaceMarketOrderAsync(
+                            symbol,
+                            quantity,
+                            "sell",
+                            shortSignal.EntryPrice,
+                            takeProfit,
+                            stopLoss
+                        );
+
+                        var position = new Position
+                        {
+                            Symbol = symbol,
+                            Qty = quantity,
+                            AverageEntryPrice = shortSignal.EntryPrice,
+                            OpenTime = DateTime.Now,
+                            TakeProfit = takeProfit,
+                            StopLoss = stopLoss,
+                            Status = "Open",
+                            Type = "Short"
+                        };
                 
-                    await _positionDataService.AddPositionAsync(position);
+                        await _positionDataService.AddPositionAsync(position);
+                    }
                 }
             }
             else
@@ -243,14 +247,17 @@ public class TradingStrategy : ITradingStrategy
     {
         var account = await _accountDataService.GetAccountAsync();
 
+        int maxPositions = 5;
         int openPositions = _dbContext.Positions.Count(p => p.Status == "Open");
-        if (openPositions >= 5)
+        if (openPositions >= maxPositions)
             return 0;
 
+        
         double buyingPower = Convert.ToDouble(account.buying_power, CultureInfo.InvariantCulture);
 
-        double maxRiskPerTradeFraction = 0.05;
-        double maxCapitalPerTradeFraction = 0.2;
+        int remainingSlots = maxPositions - openPositions;
+        double maxRiskPerTradeFraction = 0.05 / remainingSlots;   
+        double maxCapitalPerTradeFraction = 0.2 / remainingSlots;
 
         double maxRiskPerTrade = buyingPower * maxRiskPerTradeFraction;
         double maxPositionCost = buyingPower * maxCapitalPerTradeFraction;
@@ -295,9 +302,9 @@ public class TradingStrategy : ITradingStrategy
     {
         double risk = Math.Abs(entry - p1);
         double rewardMultiplier = 1.2;
-        
+
         return direction == "Long"
-            ? Math.Round(entry + (risk * rewardMultiplier), 2) 
-            : Math.Round(entry - (risk * rewardMultiplier), 2); 
+            ? Math.Max(Math.Round(entry + (risk * rewardMultiplier), 2), Math.Round(entry + 0.01, 2))
+            : Math.Min(Math.Round(entry - (risk * rewardMultiplier), 2), Math.Round(entry - 0.01, 2));
     }
 }

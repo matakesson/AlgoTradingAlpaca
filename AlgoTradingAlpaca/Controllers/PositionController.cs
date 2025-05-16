@@ -22,4 +22,12 @@ public class PositionController : Controller
         var response = await _positionDataService.GetPositionsAsync();
         return Ok(response);
     }
+
+    [HttpGet("GetClosedPositions")]
+    public async Task<ActionResult<List<Position>>> GetClosedPositons()
+    {
+        var response = await _positionDataService.GetClosedPostionsAsync();
+        return Ok(response);
+    }
+    
 }

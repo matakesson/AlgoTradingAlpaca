@@ -22,6 +22,15 @@ public class PositionDataService : IPositionDataService
         }
     }
 
+    public async Task<List<Position>> GetClosedPostionsAsync()
+    {
+        using (var scope = _serviceProvider.CreateScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            return context.Positions.Where(p => p.Status != "Open").ToList();
+        }
+    }
+
     public async Task AddPositionAsync(Position position)
     {
         using var scope = _serviceProvider.CreateScope();

@@ -7,4 +7,5 @@ public interface IBarDataService
 {
     Task<List<BarData>> GetBarDataAsync();
     Task ProcessBarData(JsonElement element);
+    Task<List<BarData>> GetBars(string symbol);
 }

@@ -54,7 +54,6 @@ public class BarDataService : IBarDataService
             await _context.SaveChangesAsync();
             await UpdatePositionsLastPrice(barData);
             
-            
             _barList.Clear();    
         } 
     }
@@ -71,6 +70,11 @@ public class BarDataService : IBarDataService
                     
             await _context.SaveChangesAsync();
         }
-        
+    }
+
+    public async Task<List<BarData>> GetBars(string symbol)
+    {
+        var bars = await _context.BarData.Where(p => p.Symbol == symbol).OrderByDescending(p => p.TimeStamp).Take(50).ToListAsync();
+        return bars;
     }
 }
