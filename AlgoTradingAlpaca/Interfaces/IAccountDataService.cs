@@ -5,4 +5,5 @@ namespace AlgoTradingAlpaca.Interfaces;
 public interface IAccountDataService
 {
     Task<Account> GetAccountAsync();
+    Task<AccountHistory> GetAccountHistoryAsync();
 }

@@ -67,7 +67,18 @@ public class TradingStrategy : ITradingStrategy
                         double fallbackMove = (signal.EntryPrice - signal.Point1) * 1.618;
                         takeProfit = Math.Round(signal.EntryPrice + fallbackMove, 2);
                     }
-                    double stopLoss = Math.Round(signal.Point1, 2);
+                    double rawStopLoss = signal.Point1;
+                    double stopBuffer = 0.25;  
+                    double maxStopLoss = Math.Round(signal.EntryPrice - stopBuffer, 2);
+
+                    
+                    double stopLoss = Math.Min(Math.Round(rawStopLoss, 2), maxStopLoss);
+                    Console.WriteLine($"ENTRY: {signal.EntryPrice} STOP LOS: {stopLoss} PROFIT: {takeProfit}");
+                    if (stopLoss >= maxStopLoss)
+                    {
+                        Console.WriteLine($"[ERROR] stopLoss too close to base price. stopLoss={stopLoss}, maxAllowed={maxStopLoss}");
+                        continue;
+                    }
                     int quantity = await CalculateOrderQuantity(stopLoss, signal.EntryPrice, "Long");
                     if (quantity != 0)
                     {
@@ -101,8 +112,18 @@ public class TradingStrategy : ITradingStrategy
                 if (shortSignal is { IsBreakout: true })
                 {
                     double takeProfit = CalculateTakeProfit(shortSignal.Point1, shortSignal.EntryPrice, "short");
-                    double stopLoss = Math.Round(shortSignal.Point1, 2);
-                    int quantity = await CalculateOrderQuantity(stopLoss, shortSignal.EntryPrice, "Short");
+                    double rawStopLoss = signal.Point1;
+                    double stopBuffer = 0.25;  
+                    double maxStopLoss = Math.Round(signal.EntryPrice + stopBuffer, 2);
+
+                    
+                    
+                    double stopLoss = Math.Min(Math.Round(rawStopLoss, 2), maxStopLoss);
+                    if (stopLoss <= maxStopLoss)
+                    {
+                        Console.WriteLine($"[ERROR] stopLoss too close to base price. stopLoss={stopLoss}, maxAllowed={maxStopLoss}");
+                        continue;
+                    }                    int quantity = await CalculateOrderQuantity(stopLoss, shortSignal.EntryPrice, "Short");
                     if (quantity != 0)
                     {
                         await _tradingClientService.PlaceMarketOrderAsync(
@@ -135,8 +156,10 @@ public class TradingStrategy : ITradingStrategy
                 Console.WriteLine($"[POSITION] {symbol} has open positions: {openPosition}");
                 double stopLoss = openPosition.StopLoss;
                 double takeProfit = openPosition.TakeProfit;
+                double currentHighPrice = bars.Last().HighPrice;
+                double currentLowPrice = bars.Last().LowPrice;
                 double currentPrice = bars.Last().ClosingPrice;
-                if (openPosition.Type == "Long" && currentPrice >= takeProfit || openPosition.Type == "Short" && currentPrice <= takeProfit)
+                if (openPosition.Type == "Long" && currentHighPrice >= takeProfit || openPosition.Type == "Short" && currentLowPrice <= takeProfit)
                 {
                     openPosition.Status = "Profit";
                     openPosition.ExitTime = DateTime.Now;
@@ -144,7 +167,7 @@ public class TradingStrategy : ITradingStrategy
                     await _positionDataService.UpdatePositionAsync(openPosition);
                 }
 
-                if (openPosition.Type == "Long" && currentPrice <= stopLoss || openPosition.Type == "Short" && currentPrice >= stopLoss)
+                if (openPosition.Type == "Long" && currentLowPrice <= stopLoss || openPosition.Type == "Short" && currentHighPrice >= stopLoss)
                 {
                     openPosition.Status = "Loss";
                     openPosition.ExitTime = DateTime.Now;

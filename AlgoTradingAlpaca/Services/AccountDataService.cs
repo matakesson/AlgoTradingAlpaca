@@ -31,5 +31,16 @@ public class AccountDataService : IAccountDataService
 
         return account;
     }
-    
+
+    public async Task<AccountHistory> GetAccountHistoryAsync()
+    {
+        
+        var response = await _httpClient.GetAsync("account/portfolio/history");
+        Console.WriteLine(response);
+        response.EnsureSuccessStatusCode();
+        var jsonResponse = await response.Content.ReadAsStringAsync();
+        var accountHistory = JsonSerializer.Deserialize<AccountHistory>(jsonResponse);
+        Console.WriteLine(accountHistory);
+        return accountHistory;
+    }
 }

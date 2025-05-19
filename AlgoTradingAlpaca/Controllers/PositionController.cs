@@ -10,10 +10,12 @@ public class PositionController : Controller
 {
     
     private readonly IPositionDataService _positionDataService;
+    private readonly IAccountDataService _accountDataService;
 
-    public PositionController(IPositionDataService positionDataService)
+    public PositionController(IPositionDataService positionDataService, IAccountDataService accountDataService)
     {
         _positionDataService = positionDataService;
+        _accountDataService = accountDataService;
     }
     
     [HttpGet("GetPositions")]
@@ -27,7 +29,8 @@ public class PositionController : Controller
     public async Task<ActionResult<List<Position>>> GetClosedPositons()
     {
         var response = await _positionDataService.GetClosedPostionsAsync();
-        return Ok(response);
+        var response2 = await _accountDataService.GetAccountHistoryAsync();
+        return Ok(response2);
     }
     
 }
