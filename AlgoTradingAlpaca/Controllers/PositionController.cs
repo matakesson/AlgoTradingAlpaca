@@ -26,7 +26,7 @@ public class PositionController : Controller
     }
 
     [HttpGet("GetClosedPositions")]
-    public async Task<ActionResult<List<Position>>> GetClosedPositons()
+    public async Task<ActionResult<List<Position>>> GetClosedPositions()
     {
         var response = await _positionDataService.GetClosedPostionsAsync();
         var response2 = await _accountDataService.GetAccountHistoryAsync();

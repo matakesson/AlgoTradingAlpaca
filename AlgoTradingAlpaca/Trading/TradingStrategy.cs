@@ -82,28 +82,38 @@ public class TradingStrategy : ITradingStrategy
                     int quantity = await CalculateOrderQuantity(stopLoss, signal.EntryPrice, "Long");
                     if (quantity != 0)
                     {
-                        await _tradingClientService.PlaceMarketOrderAsync(
-                            symbol,
-                            quantity,
-                            "buy",
-                            signal.EntryPrice,
-                            takeProfit,
-                            stopLoss
-                        );
-
-                        var position = new Position
+                        try
                         {
-                            Symbol = symbol,
-                            Qty = quantity,
-                            AverageEntryPrice = signal.EntryPrice,
-                            OpenTime = DateTime.Now,
-                            TakeProfit = takeProfit,
-                            StopLoss = stopLoss,
-                            Status = "Open",
-                            Type = "Long"
-                        };
-                
-                        await _positionDataService.AddPositionAsync(position);
+                            await _tradingClientService.PlaceMarketOrderAsync(
+                                symbol,
+                                quantity,
+                                "buy",
+                                signal.EntryPrice,
+                                takeProfit,
+                                stopLoss
+                            );
+
+                            var position = new Position
+                            {
+                                Symbol = symbol,
+                                Qty = quantity,
+                                AverageEntryPrice = signal.EntryPrice,
+                                OpenTime = DateTime.Now,
+                                TakeProfit = takeProfit,
+                                StopLoss = stopLoss,
+                                Status = "Open",
+                                Type = "Long"
+                            };
+
+                            await _positionDataService.AddPositionAsync(position);
+                        }
+
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine("Error while placing market order" + ex.Message);
+                        }
+                        
+                        
                     }
                 }
 
@@ -112,12 +122,10 @@ public class TradingStrategy : ITradingStrategy
                 if (shortSignal is { IsBreakout: true })
                 {
                     double takeProfit = CalculateTakeProfit(shortSignal.Point1, shortSignal.EntryPrice, "short");
-                    double rawStopLoss = signal.Point1;
+                    double rawStopLoss = shortSignal.Point1;
                     double stopBuffer = 0.25;  
-                    double maxStopLoss = Math.Round(signal.EntryPrice + stopBuffer, 2);
+                    double maxStopLoss = Math.Round(shortSignal.EntryPrice + stopBuffer, 2);
 
-                    
-                    
                     double stopLoss = Math.Min(Math.Round(rawStopLoss, 2), maxStopLoss);
                     if (stopLoss <= maxStopLoss)
                     {
@@ -126,28 +134,37 @@ public class TradingStrategy : ITradingStrategy
                     }                    int quantity = await CalculateOrderQuantity(stopLoss, shortSignal.EntryPrice, "Short");
                     if (quantity != 0)
                     {
-                        await _tradingClientService.PlaceMarketOrderAsync(
-                            symbol,
-                            quantity,
-                            "sell",
-                            shortSignal.EntryPrice,
-                            takeProfit,
-                            stopLoss
-                        );
-
-                        var position = new Position
+                        try
                         {
-                            Symbol = symbol,
-                            Qty = quantity,
-                            AverageEntryPrice = shortSignal.EntryPrice,
-                            OpenTime = DateTime.Now,
-                            TakeProfit = takeProfit,
-                            StopLoss = stopLoss,
-                            Status = "Open",
-                            Type = "Short"
-                        };
-                
-                        await _positionDataService.AddPositionAsync(position);
+                            await _tradingClientService.PlaceMarketOrderAsync(
+                                symbol,
+                                quantity,
+                                "sell",
+                                shortSignal.EntryPrice,
+                                takeProfit,
+                                stopLoss
+                            );
+
+                            var position = new Position
+                            {
+                                Symbol = symbol,
+                                Qty = quantity,
+                                AverageEntryPrice = shortSignal.EntryPrice,
+                                OpenTime = DateTime.Now,
+                                TakeProfit = takeProfit,
+                                StopLoss = stopLoss,
+                                Status = "Open",
+                                Type = "Short"
+                            };
+
+                            await _positionDataService.AddPositionAsync(position);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine("Error while placing order" + ex.Message);
+                        }
+                        
+                        
                     }
                 }
             }

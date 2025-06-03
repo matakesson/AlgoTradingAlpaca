@@ -14,17 +14,15 @@ public class CalculateBearishReversal : ICalculateBearishReversal
             return null;
         var orderedBars = barData.OrderBy(b => b.TimeStamp).ToList();
         var recentBars = orderedBars.Skip(Math.Max(0, orderedBars.Count - lookbackPeriod)).ToList();
-        var highIndex = ShortHelpers.FindHighPointIndex(barData);
-        int recentOffset = barData.Count - recentBars.Count;
-        int recentHighIndex = highIndex - recentOffset;
-        if (recentHighIndex < 0 || recentHighIndex >= recentBars.Count)
+        var highIndex = ShortHelpers.FindHighPointIndex(recentBars);
+        if (highIndex < 0 || highIndex >= recentBars.Count)
             return null;
-        var highClose = recentBars[recentHighIndex].HighPrice;
-        if (!ShortHelpers.IsValidUpTrend(barData, highClose, highIndex, lookbackPeriod, minUpTrendPercentage)) 
+        var highClose = recentBars[highIndex].HighPrice;
+        if (!ShortHelpers.IsValidUpTrend(recentBars, highClose, highIndex, lookbackPeriod, minUpTrendPercentage)) 
             return null;
-        if (!ShortHelpers.IsValidHighPosition(barData, highIndex))
+        if (!ShortHelpers.IsValidHighPosition(recentBars, highIndex))
             return null;
-        var bearishTrend = ShortHelpers.BuildBearishTrend(barData, highIndex);
+        var bearishTrend = ShortHelpers.BuildBearishTrend(recentBars, highIndex);
         if (bearishTrend.Count == 0)
             return null;
         var bearishLowIndex = highIndex + bearishTrend.Count - 1;
@@ -34,7 +32,7 @@ public class CalculateBearishReversal : ICalculateBearishReversal
         var bullishStart = bearishLowIndex + 1;
         if (bullishStart >= recentBars.Count)
             return null;
-        var bullishTrend = ShortHelpers.BuildBullishTrend(barData, bullishStart);
+        var bullishTrend = ShortHelpers.BuildBullishTrend(recentBars, bullishStart);
         if (bullishTrend.Count < 3)
             return null;
         double currentPrice = recentBars.Last().ClosingPrice;
