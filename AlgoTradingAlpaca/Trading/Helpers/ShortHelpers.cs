@@ -53,7 +53,7 @@ public static class ShortHelpers
         for (int i = bearishTrendStart + 1; i < bars.Count; i++)
         {
             double currentClose = bars[i].ClosingPrice;
-            if (currentClose < lowestPrice)
+            if (bars[i].ClosingPrice < lowestPrice)
             {
                 lowestPrice = currentClose;
                 bearishTrend.Add(bars[i]);
